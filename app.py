@@ -11,7 +11,7 @@ def webhook():
         token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
 
-        if mode == "subscribe" and token == VERIFY_TOKEN:
+        if mode == "subscribe" and token == drsmile_secure_token:
             print("✅ WEBHOOK_VERIFIED")
             return challenge, 200
         else:
