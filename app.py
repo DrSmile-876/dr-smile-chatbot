@@ -11,7 +11,7 @@ def webhook():
     VERIFY_TOKEN = "drsmile_secure_token"
 
     if request.method == 'GET':
-        if request.args.get("hub.verify_token") == VERIFY_TOKEN:
+        if request.args.get("hub.verify_token") == drsmile_secret:
             return request.args.get("hub.challenge")
         return "❌ Invalid verification token.", 403
 
