@@ -3,8 +3,7 @@ import os
 
 app = Flask(__name__)
 
-VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123
-")
+VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
