@@ -2,23 +2,21 @@ from flask import Flask, request
 
 app = Flask(__name__)
 
-VERIFY_TOKEN = "drsmile_secret"  # Must match what you enter on Meta
+@app.route('/', methods=["GET"])
+def home():
+    return "✅ Dr. Smile Messenger Bot is live!"
 
-@app.route("/webhook", methods=["GET", "POST"])
+@app.route('/webhook', methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
-        mode = request.args.get("hub.mode")
-        token = request.args.get("hub.verify_token")
-        challenge = request.args.get("hub.challenge")
-
-        if mode == "subscribe" and token == VERIFY_TOKEN:
-            print("✅ WEBHOOK_VERIFIED")
-            return challenge, 200
-        else:
-            print("❌ Invalid token")
-            return "Invalid verify token", 403
-
-    if request.method == "POST":
+        VERIFY_TOKEN = "your_verify_token_here"
+        if request.args.get("hub.verify_token") == VERIFY_TOKEN:
+            return request.args.get("hub.challenge")
+        return "❌ Verification failed."
+    elif request.method == "POST":
         data = request.json
-        print("📩 New Message:", data)
-        return "EVENT_RECEIVED", 200
+        print(data)  # Optional: log webhook events
+        return "✅ Event received", 200
+
+if __name__ == '__main__':
+    app.run(host="0.0.0.0", port=10000)
