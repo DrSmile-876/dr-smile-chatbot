@@ -1,67 +1,66 @@
 import os
 import requests
+from flask import Flask, request, jsonify
 import threading
 import time
-import json
 import logging
-from flask import Flask, request, jsonify
+import json
 
 app = Flask(__name__)
 
-# ✅ Setup Logging
-logging.basicConfig(level=logging.INFO, filename="app.log", filemode="a",
-                    format="%(asctime)s - %(levelname)s - %(message)s")
+# ✅ Logging setup
+logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
-# ✅ Load environment
+# ✅ Load environment variables
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
-RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://your-render-url.onrender.com")
-TOKEN_FILE = os.getenv("TOKEN_FILE", "tokens.json")
-PING_INTERVAL = 840  # 14 min
+PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dr-smile-chatbot.onrender.com")
+PING_INTERVAL = 840  # 14 minutes
+TOKEN_FILE = "access_token.json"
 
-# ✅ Load access token from file
-def load_token():
-    try:
-        with open(TOKEN_FILE, "r") as f:
-            data = json.load(f)
-            return data.get("access_token")
-    except Exception as e:
-        logging.error(f"Error reading token file: {e}")
-        return os.getenv("PAGE_ACCESS_TOKEN", "")
-
-# ✅ Save access token to file
-def save_token(token):
-    try:
-        with open(TOKEN_FILE, "w") as f:
-            json.dump({"access_token": token}, f)
-        logging.info("Access token saved.")
-    except Exception as e:
-        logging.error(f"Error writing token file: {e}")
-
-PAGE_ACCESS_TOKEN = load_token()
-
-# ✅ Webhook Handler
+# ✅ Facebook webhook verification and message handling
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
-        logging.info(f"Webhook GET Params: {request.args}")
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
-
-        if mode == "subscribe" and token == VERIFY_TOKEN and challenge:
+        if mode == "subscribe" and token == VERIFY_TOKEN:
             return challenge, 200
-        return "Forbidden: Token mismatch or missing parameters", 403
+        return "Forbidden: Token mismatch", 403
 
     elif request.method == "POST":
         try:
-            data = request.get_json(force=True)
-            logging.info(f"[📩 Chatbot] Message: {data}")
+            payload = request.get_json(force=True)
+            logging.info(f"📩 Incoming: {json.dumps(payload)}")
+
+            for entry in payload.get("entry", []):
+                for messaging_event in entry.get("messaging", []):
+                    sender_id = messaging_event.get("sender", {}).get("id")
+                    message_text = messaging_event.get("message", {}).get("text")
+
+                    if sender_id and message_text:
+                        send_message(sender_id, f"👋 Thanks for reaching out to Dr. Smile! We received: \"{message_text}\"")
+
             return "EVENT_RECEIVED", 200
         except Exception as e:
-            logging.error(f"Webhook POST error: {e}")
+            logging.error(f"❌ POST Error: {e}")
             return "Error", 500
 
-# 🔁 Token Refresh Endpoint
+# ✅ Function to send replies
+def send_message(recipient_id, text):
+    headers = {
+        "Content-Type": "application/json"
+    }
+    data = {
+        "recipient": {"id": recipient_id},
+        "message": {"text": text}
+    }
+    params = {"access_token": get_token()}
+    response = requests.post("https://graph.facebook.com/v18.0/me/messages", headers=headers, params=params, json=data)
+    logging.info(f"📤 Sent to {recipient_id}: {text} | Status: {response.status_code}")
+
+# ✅ Token refresh endpoint
 @app.route("/refresh-token", methods=["GET"])
 def refresh_token():
     try:
@@ -72,36 +71,40 @@ def refresh_token():
             "fb_exchange_token": os.getenv("FB_REFRESH_TOKEN")
         })
         data = res.json()
-
         if "access_token" in data:
-            new_token = data["access_token"]
-            save_token(new_token)
-            return jsonify({
-                "status": "success",
-                "new_token": new_token,
-                "expires_in": data.get("expires_in", "unknown")
-            })
-        return jsonify({"status": "error", "details": data}), 400
+            with open(TOKEN_FILE, "w") as f:
+                json.dump(data, f)
+            return jsonify({"status": "success", "token": data["access_token"]})
+        return jsonify({"status": "fail", "details": data}), 400
     except Exception as e:
-        logging.error(f"Token refresh error: {e}")
-        return jsonify({"status": "fail", "error": str(e)}), 500
+        return jsonify({"status": "error", "message": str(e)}), 500
 
-# ✅ Home Route
+# ✅ Load saved token or fallback
+def get_token():
+    if os.path.exists(TOKEN_FILE):
+        try:
+            with open(TOKEN_FILE, "r") as f:
+                return json.load(f).get("access_token", PAGE_ACCESS_TOKEN)
+        except:
+            pass
+    return PAGE_ACCESS_TOKEN
+
+# ✅ Homepage route
 @app.route("/")
 def home():
-    return "Dr. Smile Chatbot + Token Auto-Refresh + Keep Alive ✅"
+    return "Dr. Smile Chatbot is Live ✅"
 
-# 🔁 Keep Alive
+# 🔁 Keep-alive ping loop
 def keep_alive():
     while True:
         try:
             logging.info(f"🔄 Pinging {RENDER_EXTERNAL_URL}")
             requests.get(RENDER_EXTERNAL_URL, timeout=10)
         except Exception as e:
-            logging.warning(f"Keep-alive failed: {e}")
+            logging.error(f"❌ Ping failed: {e}")
         time.sleep(PING_INTERVAL)
 
-# ✅ Start App
+# ✅ App runner
 if __name__ == "__main__":
     threading.Thread(target=keep_alive, daemon=True).start()
     app.run(host="0.0.0.0", port=10000)
