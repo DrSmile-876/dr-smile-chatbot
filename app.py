@@ -15,12 +15,19 @@ def webhook():
         token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
 
-        print(f"🔍 Incoming GET Request — mode: {mode}, token: {token}, challenge: {challenge}")
+        print(f"🚨 Webhook GET — mode: {mode}, token: {token}, challenge: {challenge}")
         print(f"🔐 Expected VERIFY_TOKEN: {VERIFY_TOKEN}")
 
         if mode == "subscribe" and token == VERIFY_TOKEN:
             return challenge, 200
-        return "Forbidden", 403
+        else:
+            return "Forbidden: Token mismatch or wrong mode", 403
+
+    elif request.method == "POST":
+        data = request.get_json()
+        print(f"[Chatbot] Incoming message: {data}")
+        return "EVENT_RECEIVED", 200
+
 
 # 🔄 TOKEN REFRESH ENDPOINT
 @app.route("/refresh-token", methods=["GET"])
