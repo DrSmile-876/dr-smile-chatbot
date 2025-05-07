@@ -1,18 +1,22 @@
 import os
-import threading
-import time
 import requests
 from flask import Flask, request, jsonify
+import threading
+import time
 
 app = Flask(__name__)
 
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
+PING_INTERVAL = 840  # 14 minutes
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://your-render-url.onrender.com")
+
 
 # ✅ FACEBOOK CHATBOT VERIFICATION
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
+        print(f"🔍 FB Raw GET Params: {request.args}")
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
         challenge = request.args.get("hub.challenge")
@@ -22,13 +26,17 @@ def webhook():
 
         if mode == "subscribe" and token == VERIFY_TOKEN:
             return challenge, 200
-        else:
-            return "Forbidden: Token mismatch or wrong mode", 403
+        return "Forbidden: Token mismatch or missing params", 403
 
     elif request.method == "POST":
-        data = request.get_json()
-        print(f"[Chatbot] Incoming message: {data}")
-        return "EVENT_RECEIVED", 200
+        try:
+            data = request.get_json()
+            print(f"[Chatbot] Incoming message: {data}")
+            return "EVENT_RECEIVED", 200
+        except Exception as e:
+            print(f"❌ Error in POST handler: {e}")
+            return "Error", 500
+
 
 # 🔄 TOKEN REFRESH ENDPOINT
 @app.route("/refresh-token", methods=["GET"])
@@ -56,25 +64,24 @@ def refresh_token():
     except Exception as e:
         return jsonify({"status": "fail", "error": str(e)}), 500
 
+
 # ✅ HOME ROUTE
 @app.route("/")
 def home():
     return "Dr. Smile Chatbot + Token Refresher Active ✅"
 
-# 🛡️ KEEP ALIVE PING FUNCTION
-def keep_alive_ping():
+
+# 🔁 KEEP-ALIVE PINGER
+def keep_alive():
     while True:
         try:
-            print("🔁 Sending self-ping to keep Render app alive...")
-            url = os.getenv("RENDER_EXTERNAL_URL") or "https://dr-smile-chatbot.onrender.com"
-            requests.get(url)
+            time.sleep(PING_INTERVAL)
+            print(f"🔄 Pinging self at {RENDER_EXTERNAL_URL}")
+            requests.get(RENDER_EXTERNAL_URL)
         except Exception as e:
-            print(f"⚠️ Ping failed: {e}")
-        time.sleep(840)  # Every 14 minutes (840 sec)
+            print(f"❌ Ping error: {e}")
+
 
 if __name__ == "__main__":
-    # 🔁 Start keep-alive thread
-    threading.Thread(target=keep_alive_ping, daemon=True).start()
-
-    # 🚀 Launch Flask app
+    threading.Thread(target=keep_alive, daemon=True).start()
     app.run(host="0.0.0.0", port=10000)
