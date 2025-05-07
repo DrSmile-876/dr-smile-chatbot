@@ -11,13 +11,18 @@ PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
-        if request.args.get("hub.verify_token") == VERIFY_TOKEN:
-            return request.args.get("hub.challenge")
-        return "Forbidden", 403
+        mode = request.args.get("hub.mode")
+        token = request.args.get("hub.verify_token")
+        challenge = request.args.get("hub.challenge")
+
+        if mode == "subscribe" and token == VERIFY_TOKEN:
+            return challenge, 200
+        else:
+            return "Forbidden", 403
 
     elif request.method == "POST":
         data = request.get_json()
-        # ➕ Add your chatbot logic here if needed
+        # ➕ Add chatbot message processing logic here later
         print(f"[Chatbot] Incoming message: {data}")
         return "EVENT_RECEIVED", 200
 
