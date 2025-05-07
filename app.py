@@ -44,7 +44,7 @@ def respond_to_user(sender_id, message):
     send_message(sender_id, text)
 
 def send_message(recipient_id, message_text):
-    url = f"https://graph.facebook.com/v18.0/me/messages?access_token={EAAjRrYZCHTqABO8Mm28VEXLNsv8jQpk9RXajY4oPItvja6d89sXwh0Aq1MyMdUQACHxUEyZBw5nZBL4508BFFcnRBG2hpb500PG3fuzAKgP0Y4iaLhzV0KzDjJTRNzZA5Wp04ff4aOohWgksuzFyLLlSZBIbXIpclNvmN8ZAp11XSheHsqoiC5e790wjmrpAZDZD}"
+    url = f"https://graph.facebook.com/v18.0/me/messages?access_token={PAGE_ACCESS_TOKEN}"
     payload = {
         "recipient": {"id": recipient_id},
         "message": {"text": message_text}
