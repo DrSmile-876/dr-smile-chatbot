@@ -8,17 +8,14 @@ import json
 
 app = Flask(__name__)
 
-# ✅ Logging setup
 logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
-# ✅ Load environment variables
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dr-smile-chatbot.onrender.com")
-PING_INTERVAL = 840  # 14 minutes
+PING_INTERVAL = 840
 TOKEN_FILE = "access_token.json"
 
-# ✅ Facebook webhook verification and message handling
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -40,27 +37,22 @@ def webhook():
                     message_text = messaging_event.get("message", {}).get("text")
 
                     if sender_id and message_text:
-                        send_message(sender_id, f"👋 Thanks for reaching out to Dr. Smile! We received: \"{message_text}\"")
-
+                        if "order" in message_text.lower():
+                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please confirm your location to begin your order.")
+                        else:
+                            send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
             return "EVENT_RECEIVED", 200
         except Exception as e:
             logging.error(f"❌ POST Error: {e}")
             return "Error", 500
 
-# ✅ Function to send replies
 def send_message(recipient_id, text):
-    headers = {
-        "Content-Type": "application/json"
-    }
-    data = {
-        "recipient": {"id": recipient_id},
-        "message": {"text": text}
-    }
+    headers = {"Content-Type": "application/json"}
+    data = {"recipient": {"id": recipient_id}, "message": {"text": text}}
     params = {"access_token": get_token()}
     response = requests.post("https://graph.facebook.com/v18.0/me/messages", headers=headers, params=params, json=data)
     logging.info(f"📤 Sent to {recipient_id}: {text} | Status: {response.status_code}")
 
-# ✅ Token refresh endpoint
 @app.route("/refresh-token", methods=["GET"])
 def refresh_token():
     try:
@@ -79,7 +71,6 @@ def refresh_token():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# ✅ Load saved token or fallback
 def get_token():
     if os.path.exists(TOKEN_FILE):
         try:
@@ -89,17 +80,14 @@ def get_token():
             pass
     return PAGE_ACCESS_TOKEN
 
-# ✅ Health check for Render
 @app.route("/healthz", methods=["GET"])
 def health_check():
     return "OK", 200
 
-# ✅ Homepage route
 @app.route("/")
 def home():
     return "Dr. Smile Chatbot is Live ✅"
 
-# 🔁 Keep-alive ping loop
 def keep_alive():
     while True:
         try:
@@ -109,7 +97,6 @@ def keep_alive():
             logging.error(f"❌ Ping failed: {e}")
         time.sleep(PING_INTERVAL)
 
-# ✅ App runner
 if __name__ == "__main__":
     threading.Thread(target=keep_alive, daemon=True).start()
     app.run(host="0.0.0.0", port=10000)
