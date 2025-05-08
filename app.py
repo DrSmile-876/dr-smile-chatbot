@@ -89,6 +89,11 @@ def get_token():
             pass
     return PAGE_ACCESS_TOKEN
 
+# ✅ Health check for Render
+@app.route("/healthz", methods=["GET"])
+def health_check():
+    return "OK", 200
+
 # ✅ Homepage route
 @app.route("/")
 def home():
