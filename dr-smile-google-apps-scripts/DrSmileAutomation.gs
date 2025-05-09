@@ -4,18 +4,18 @@
 
 // ========== CONFIG ==========
 var CONFIG = PropertiesService.getScriptProperties();
-var MAPS_API_KEY       = CONFIG.getProperty('MAPS_API_KEY');
-var SPREADSHEET_ID     = CONFIG.getProperty('SPREADSHEET_ID');
-var ARRIVAL_FORM_ID    = CONFIG.getProperty('ARRIVAL_FORM_ID');
-var TWILIO_SID         = CONFIG.getProperty('TWILIO_SID');
-var TWILIO_AUTH        = CONFIG.getProperty('TWILIO_AUTH');
-var TWILIO_NUMBER      = CONFIG.getProperty('TWILIO_NUMBER');
-var BUSINESS_EMAIL     = CONFIG.getProperty('BUSINESS_EMAIL');
+var MAPS_API_KEY = CONFIG.getProperty('MAPS_API_KEY');
+var SPREADSHEET_ID = CONFIG.getProperty('SPREADSHEET_ID');
+var ARRIVAL_FORM_ID = CONFIG.getProperty('ARRIVAL_FORM_ID');
+var TWILIO_SID = CONFIG.getProperty('TWILIO_SID');
+var TWILIO_AUTH = CONFIG.getProperty('TWILIO_AUTH');
+var TWILIO_NUMBER = CONFIG.getProperty('TWILIO_NUMBER');
+var BUSINESS_EMAIL = CONFIG.getProperty('BUSINESS_EMAIL');
 
 var DIGITAL_FORM_SHEET = 'Form Responses 1';
-var BEARER_DB_SHEET    = 'Delivery Agents';
-var ORDER_LOG_SHEET    = 'Deliveries Order Log';
-var DENTIST_DB_SHEET   = 'DentistDatabase';
+var BEARER_DB_SHEET = 'Delivery Agents';
+var ORDER_LOG_SHEET = 'Deliveries Order Log';
+var DENTIST_DB_SHEET = 'DentistDatabase';
 
 function onDigitalCheckIn(e) {
   if (!e || !e.range) return;
@@ -36,18 +36,18 @@ function onDigitalCheckIn(e) {
   var latitude = values[idx('Latitude') - 1];
   var longitude = values[idx('Longitude') - 1];
   var mapLink = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-  var mapImg = `https://maps.googleapis.com/maps/api/staticmap?center=${latitude},${longitude}&zoom=15&size=600x300&markers=color:red%7C${latitude},${longitude}&key=${MAPS_API_KEY}`;
+  var mapImg  = `https://maps.googleapis.com/maps/api/staticmap?center=${latitude},${longitude}&zoom=15&size=600x300&markers=color:red%7C${latitude},${longitude}&key=${MAPS_API_KEY}`;
 
-  var html = `<p>Hi ${fullName},</p>
+  var htmlBody = `<p>Hi ${fullName},</p>
     <p>Your appointment is booked at <strong>${office}</strong>.</p>
     <p><a href="${mapLink}"><img src="${mapImg}" /></a></p>
-    <p>Scan this QR to confirm arrival:</p>
+    <p>On arrival, scan this QR to confirm:</p>
     <p><a href="${qrCode}"><img src="${qrCode}" /></a></p>`;
 
   try {
-    MailApp.sendEmail({ to: email, subject: 'Your Dr. Smile Appointment', htmlBody: html });
+    MailApp.sendEmail({ to: email, subject: 'Your Dr. Smile Appointment', htmlBody });
   } catch (err) {
-    sendTwilioSMS('+18761234567', `Email failed for ${fullName}`);
+    sendTwilioSMS('+18761234567', `🛑 Email failed for ${fullName} lead.`);
   }
 
   assignDeliveryAgent(zone, fullName, leadId, office);
@@ -65,7 +65,7 @@ function assignDeliveryAgent(zone, name, leadId, office) {
   var bearerName = chosen[0];
   var bearerPhone = chosen[1];
   deliverySheet.appendRow([new Date(), leadId, name, zone, office, bearerName, bearerPhone]);
-  sendTwilioSMS(bearerPhone, `📦 Dr. Smile order for ${name} → ${office}`);
+  sendTwilioSMS(bearerPhone, `📦 New Dr. Smile order for ${name} in ${zone} ➜ ${office}`);
 }
 
 function onArrivalSubmit(e) {
@@ -103,7 +103,7 @@ function onArrivalSubmit(e) {
       try {
         MailApp.sendEmail({ to: email, subject: `📍 Patient Arrival`, body: `Lead ${leadId} has arrived.\nNotes: ${notes}` });
       } catch (err) {
-        sendTwilioSMS(phone, `📍 Lead ${leadId} arrived.`);
+        sendTwilioSMS(phone, `📍 Patient arrived for Lead ID ${leadId}`);
       }
       break;
     }
@@ -112,13 +112,10 @@ function onArrivalSubmit(e) {
 
 function sendTwilioSMS(to, message) {
   var url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`;
+  var payload = { To: to, From: TWILIO_NUMBER, Body: message };
   var options = {
     method: "post",
-    payload: {
-      To: to,
-      From: TWILIO_NUMBER,
-      Body: message
-    },
+    payload,
     headers: {
       "Authorization": "Basic " + Utilities.base64Encode(TWILIO_AUTH)
     }
