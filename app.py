@@ -7,12 +7,13 @@ import logging
 import json
 
 app = Flask(__name__)
+
 logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dr-smile-chatbot.onrender.com")
-PING_INTERVAL = 840  # 14 minutes
+PING_INTERVAL = 840
 TOKEN_FILE = "access_token.json"
 
 @app.route("/webhook", methods=["GET", "POST"])
@@ -33,10 +34,10 @@ def webhook():
             for entry in payload.get("entry", []):
                 for messaging_event in entry.get("messaging", []):
                     sender_id = messaging_event.get("sender", {}).get("id")
-                    message_text = messaging_event.get("message", {}).get("text")
+                    message_text = messaging_event.get("message", {}).get("text", "").lower()
 
                     if sender_id and message_text:
-                        if "order" in message_text.lower():
+                        if "order" in message_text:
                             send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please confirm your location to begin your order.")
                         else:
                             send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
