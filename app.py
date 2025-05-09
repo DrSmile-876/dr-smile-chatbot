@@ -7,8 +7,11 @@ import logging
 import json
 
 app = Flask(__name__)
+
+# ✅ Logging setup
 logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
+# ✅ Load environment variables
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dr-smile-chatbot.onrender.com")
@@ -29,21 +32,15 @@ def webhook():
         try:
             payload = request.get_json(force=True)
             logging.info(f"📩 Incoming: {json.dumps(payload)}")
+
             for entry in payload.get("entry", []):
                 for messaging_event in entry.get("messaging", []):
                     sender_id = messaging_event.get("sender", {}).get("id")
                     message_text = messaging_event.get("message", {}).get("text")
+
                     if sender_id and message_text:
-                        lower = message_text.lower()
-                        if "order" in lower:
-                            send_message(sender_id, "🦷 Great! Please send us your location to begin your order.")
-                        elif "location" in lower:
-                            send_message(sender_id, "📍 Thanks! Please type your parish or zone (e.g., Kingston, Montego Bay).")
-                        elif "pay" in lower:
-                            send_message(sender_id,
-                                "💳 Select a payment option:\n1️⃣ Cash on Delivery\n2️⃣ Bank Transfer\n3️⃣ PayPal: https://www.paypal.com/ncp/payment/G77UEE4UY8DQQ\n4️⃣ Pi Coin:\nMBC6NRTTQLRCABQHIR5J4R4YDJWFWRAO4ZRQIM2SVI5GSIZ2HZ42QAAAAAABEX5HINA7Y\nReminder: Use ONLY PI Chain coins.")
-                        elif "confirm" in lower:
-                            send_message(sender_id, "✅ Your order has been confirmed. We’ll notify you once shipped.")
+                        if "order" in message_text.lower():
+                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please confirm your location to begin your order.")
                         else:
                             send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
             return "EVENT_RECEIVED", 200
