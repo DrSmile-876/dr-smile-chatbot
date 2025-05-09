@@ -4,18 +4,18 @@
 
 // ========== CONFIG ==========
 var CONFIG = PropertiesService.getScriptProperties();
-var MAPS_API_KEY = CONFIG.getProperty('MAPS_API_KEY');
-var SPREADSHEET_ID = CONFIG.getProperty('SPREADSHEET_ID');
-var ARRIVAL_FORM_ID = CONFIG.getProperty('ARRIVAL_FORM_ID');
-var TWILIO_SID = CONFIG.getProperty('TWILIO_SID');
-var TWILIO_AUTH = CONFIG.getProperty('TWILIO_AUTH');
-var TWILIO_NUMBER = CONFIG.getProperty('TWILIO_NUMBER');
-var BUSINESS_EMAIL = CONFIG.getProperty('BUSINESS_EMAIL');
+var MAPS_API_KEY       = CONFIG.getProperty('MAPS_API_KEY');
+var SPREADSHEET_ID     = CONFIG.getProperty('SPREADSHEET_ID');
+var ARRIVAL_FORM_ID    = CONFIG.getProperty('ARRIVAL_FORM_ID');
+var TWILIO_SID         = CONFIG.getProperty('TWILIO_SID');
+var TWILIO_AUTH        = CONFIG.getProperty('TWILIO_AUTH');
+var TWILIO_NUMBER      = CONFIG.getProperty('TWILIO_NUMBER');
+var BUSINESS_EMAIL     = CONFIG.getProperty('BUSINESS_EMAIL');
 
 var DIGITAL_FORM_SHEET = 'Form Responses 1';
-var BEARER_DB_SHEET = 'Delivery Agents';
-var ORDER_LOG_SHEET = 'Deliveries Order Log';
-var DENTIST_DB_SHEET = 'DentistDatabase';
+var BEARER_DB_SHEET    = 'Delivery Agents';
+var ORDER_LOG_SHEET    = 'Deliveries Order Log';
+var DENTIST_DB_SHEET   = 'DentistDatabase';
 
 function onDigitalCheckIn(e) {
   if (!e || !e.range) return;
