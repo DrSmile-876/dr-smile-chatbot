@@ -19,35 +19,34 @@ var DENTIST_DB_SHEET   = 'DentistDatabase';
 
 function onDigitalCheckIn(e) {
   if (!e || !e.range) return;
-
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName(DIGITAL_FORM_SHEET);
   var row = e.range.getRow();
   var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var values = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var values  = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
   var idx = name => headers.indexOf(name) + 1;
 
   var fullName = values[idx('Customer Full Name') - 1];
-  var email = values[idx('Email') - 1];
-  var office = values[idx('Assigned Dental Office') - 1];
-  var leadId = values[idx('Lead ID') - 1];
-  var zone = values[idx('Preferred Location Zone') - 1];
-  var qrCode = values[idx('QR Code Link') - 1];
-  var latitude = values[idx('Latitude') - 1];
-  var longitude = values[idx('Longitude') - 1];
-  var mapLink = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-  var mapImg  = `https://maps.googleapis.com/maps/api/staticmap?center=${latitude},${longitude}&zoom=15&size=600x300&markers=color:red%7C${latitude},${longitude}&key=${MAPS_API_KEY}`;
+  var email    = values[idx('Email') - 1];
+  var office   = values[idx('Assigned Dental Office') - 1];
+  var leadId   = values[idx('Lead ID') - 1];
+  var zone     = values[idx('Preferred Location Zone') - 1];
+  var qrCode   = values[idx('QR Code Link') - 1];
+  var lat      = values[idx('Latitude') - 1];
+  var lon      = values[idx('Longitude') - 1];
+  var mapLink  = `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+  var mapImg   = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lon}&zoom=15&size=600x300&markers=color:red%7C${lat},${lon}&key=${MAPS_API_KEY}`;
 
   var htmlBody = `<p>Hi ${fullName},</p>
     <p>Your appointment is booked at <strong>${office}</strong>.</p>
     <p><a href="${mapLink}"><img src="${mapImg}" /></a></p>
-    <p>On arrival, scan this QR to confirm:</p>
+    <p>On arrival, scan this QR:</p>
     <p><a href="${qrCode}"><img src="${qrCode}" /></a></p>`;
 
   try {
     MailApp.sendEmail({ to: email, subject: 'Your Dr. Smile Appointment', htmlBody });
   } catch (err) {
-    sendTwilioSMS('+18761234567', `🛑 Email failed for ${fullName} lead.`);
+    sendTwilioSMS('+18761234567', `🛑 Email failed for ${fullName}`);
   }
 
   assignDeliveryAgent(zone, fullName, leadId, office);
@@ -55,17 +54,12 @@ function onDigitalCheckIn(e) {
 
 function assignDeliveryAgent(zone, name, leadId, office) {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var bearerSheet = ss.getSheetByName(BEARER_DB_SHEET);
-  var deliverySheet = ss.getSheetByName(ORDER_LOG_SHEET);
-  var data = bearerSheet.getDataRange().getValues();
-  var matches = data.filter((r, i) => i > 0 && r[2] === zone);
-  if (!matches.length) return;
+  var agents = ss.getSheetByName(BEARER_DB_SHEET).getDataRange().getValues().filter((r, i) => i && r[2] === zone);
+  if (!agents.length) return;
 
-  var chosen = matches[Math.floor(Math.random() * matches.length)];
-  var bearerName = chosen[0];
-  var bearerPhone = chosen[1];
-  deliverySheet.appendRow([new Date(), leadId, name, zone, office, bearerName, bearerPhone]);
-  sendTwilioSMS(bearerPhone, `📦 New Dr. Smile order for ${name} in ${zone} ➜ ${office}`);
+  var [bearerName, bearerPhone] = agents[Math.floor(Math.random() * agents.length)];
+  ss.getSheetByName(ORDER_LOG_SHEET).appendRow([new Date(), leadId, name, zone, office, bearerName, bearerPhone]);
+  sendTwilioSMS(bearerPhone, `📦 Dr. Smile order for ${name} → ${office}`);
 }
 
 function onArrivalSubmit(e) {
@@ -78,49 +72,38 @@ function onArrivalSubmit(e) {
 
   var leadId = e.namedValues['Lead ID'][0];
   var notes = (e.namedValues['Arrival Notes'] || [''])[0];
-  var row;
-
-  for (var i = 1; i < data.length; i++) {
-    if (data[i][idx('Lead ID') - 1] === leadId) {
-      row = i + 1;
-      sheet.getRange(row, idx('Status')).setValue('Arrived');
-      sheet.getRange(row, idx('Arrival Time')).setValue(new Date());
-      break;
-    }
-  }
-
+  var row = data.findIndex((r, i) => i && r[idx('Lead ID') - 1] === leadId) + 1;
   if (!row) return;
+
+  sheet.getRange(row, idx('Status')).setValue('Arrived');
+  sheet.getRange(row, idx('Arrival Time')).setValue(new Date());
+
   var office = sheet.getRange(row, idx('Assigned Dental Office')).getValue();
-  var dentistSheet = ss.getSheetByName(DENTIST_DB_SHEET);
-  var dData = dentistSheet.getDataRange().getValues();
-  var dHeaders = dentistSheet.getRange(1, 1, 1, dentistSheet.getLastColumn()).getValues()[0];
+  var dentists = ss.getSheetByName(DENTIST_DB_SHEET).getDataRange().getValues();
+  var dHeaders = dentists[0];
   var dIdx = name => dHeaders.indexOf(name) + 1;
 
-  for (var j = 1; j < dData.length; j++) {
-    if (dData[j][dIdx('name') - 1] === office) {
-      var email = dData[j][dIdx('email') - 1];
-      var phone = dData[j][dIdx('phone') - 1];
+  for (var i = 1; i < dentists.length; i++) {
+    if (dentists[i][dIdx('name') - 1] === office) {
       try {
-        MailApp.sendEmail({ to: email, subject: `📍 Patient Arrival`, body: `Lead ${leadId} has arrived.\nNotes: ${notes}` });
+        MailApp.sendEmail({ to: dentists[i][dIdx('email') - 1], subject: '📍 Patient Arrival', body: `Lead ${leadId} has arrived.\nNotes: ${notes}` });
       } catch (err) {
-        sendTwilioSMS(phone, `📍 Patient arrived for Lead ID ${leadId}`);
+        sendTwilioSMS(dentists[i][dIdx('phone') - 1], `📍 Arrival: Lead ${leadId}\nNotes: ${notes}`);
       }
       break;
     }
   }
 }
 
-function sendTwilioSMS(to, message) {
+function sendTwilioSMS(to, msg) {
   var url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`;
-  var payload = { To: to, From: TWILIO_NUMBER, Body: message };
+  var payload = { To: to, From: TWILIO_NUMBER, Body: msg };
   var options = {
     method: "post",
     payload,
-    headers: {
-      "Authorization": "Basic " + Utilities.base64Encode(TWILIO_AUTH)
-    }
+    headers: { "Authorization": "Basic " + Utilities.base64Encode(TWILIO_AUTH) }
   };
-  UrlFetchApp.fetch(url, options);
+  try { UrlFetchApp.fetch(url, options); } catch (e) { Logger.log("❌ SMS Fail: " + e.message); }
 }
 
 function createDigitalTrigger() {
