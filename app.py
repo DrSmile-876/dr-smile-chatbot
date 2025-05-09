@@ -7,7 +7,6 @@ import logging
 import json
 
 app = Flask(__name__)
-
 logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
@@ -24,7 +23,7 @@ def webhook():
         challenge = request.args.get("hub.challenge")
         if mode == "subscribe" and token == VERIFY_TOKEN:
             return challenge, 200
-        return "Forbidden: Token mismatch", 403
+        return "Forbidden", 403
 
     elif request.method == "POST":
         try:
@@ -32,26 +31,35 @@ def webhook():
             logging.info(f"📩 Incoming: {json.dumps(payload)}")
 
             for entry in payload.get("entry", []):
-                for messaging_event in entry.get("messaging", []):
-                    sender_id = messaging_event.get("sender", {}).get("id")
-                    message_text = messaging_event.get("message", {}).get("text", "").lower()
+                for event in entry.get("messaging", []):
+                    sender_id = event.get("sender", {}).get("id")
+                    message = event.get("message", {}).get("text", "").lower()
 
-                    if sender_id and message_text:
-                        if "order" in message_text:
-                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please confirm your location to begin your order.")
+                    if sender_id:
+                        if "order" in message:
+                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please reply with your location or preferred zone to continue your order.")
+                        elif "location" in message:
+                            send_message(sender_id, "📍 Got it! Please wait while we assign your nearest dental office and bearer for delivery.")
+                        elif "confirm" in message:
+                            send_message(sender_id, "✅ Your order is confirmed! Our team will reach out shortly.")
                         else:
-                            send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
+                            send_message(sender_id, f"👋 Hello! We're Dr. Smile. Type 'order' to begin.")
+
             return "EVENT_RECEIVED", 200
         except Exception as e:
-            logging.error(f"❌ POST Error: {e}")
+            logging.error(f"❌ Error: {e}")
             return "Error", 500
 
 def send_message(recipient_id, text):
-    headers = {"Content-Type": "application/json"}
-    data = {"recipient": {"id": recipient_id}, "message": {"text": text}}
+    url = "https://graph.facebook.com/v18.0/me/messages"
     params = {"access_token": get_token()}
-    response = requests.post("https://graph.facebook.com/v18.0/me/messages", headers=headers, params=params, json=data)
-    logging.info(f"📤 Sent to {recipient_id}: {text} | Status: {response.status_code}")
+    headers = {"Content-Type": "application/json"}
+    payload = {
+        "recipient": {"id": recipient_id},
+        "message": {"text": text}
+    }
+    res = requests.post(url, params=params, headers=headers, json=payload)
+    logging.info(f"📤 Sent to {recipient_id}: {text} | Status: {res.status_code}")
 
 @app.route("/refresh-token", methods=["GET"])
 def refresh_token():
@@ -91,7 +99,7 @@ def home():
 def keep_alive():
     while True:
         try:
-            logging.info(f"🔄 Pinging {RENDER_EXTERNAL_URL}")
+            logging.info(f"🔄 Ping {RENDER_EXTERNAL_URL}")
             requests.get(RENDER_EXTERNAL_URL, timeout=10)
         except Exception as e:
             logging.error(f"❌ Ping failed: {e}")
