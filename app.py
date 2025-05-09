@@ -7,7 +7,6 @@ import logging
 import json
 
 app = Flask(__name__)
-
 logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
@@ -34,13 +33,26 @@ def webhook():
             for entry in payload.get("entry", []):
                 for messaging_event in entry.get("messaging", []):
                     sender_id = messaging_event.get("sender", {}).get("id")
-                    message_text = messaging_event.get("message", {}).get("text")
+                    message_text = messaging_event.get("message", {}).get("text", "").lower()
 
                     if sender_id and message_text:
-                        if "order" in message_text.lower():
-                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please confirm your location to begin your order.")
+                        if "order" in message_text:
+                            send_message(sender_id, "🦷 Thanks for choosing Dr. Smile! Please confirm your location or send your parish to begin your Tooth Kit order.")
+                        elif "location" in message_text:
+                            send_message(sender_id, "📍 Please type your parish or area so we can match you with the closest delivery agent.")
+                        elif "payment" in message_text:
+                            send_message(sender_id,
+                                "💳 You can pay via:\n\n"
+                                "1. Cash on Delivery (COD)\n"
+                                "2. Bank Wire Transfer (details upon request)\n"
+                                "3. PayPal: https://www.paypal.com/ncp/payment/G77UEE4UY8DQQ\n"
+                                "4. Pi Coin Wallet (Mainnet Only):\n"
+                                "`MBC6NRTTQLRCABQHIR5J4R4YDJWFWRAO4ZRQIM2SVI5GSIZ2HZ42QAAAAAABEX5HINA7Y`\n\n"
+                                "🚨 *Pi Chain Only* — Do not send from exchanges.\n"
+                                "Join Pi: https://minepi.com/FREECOINS2021")
                         else:
-                            send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
+                            send_message(sender_id, f"👋 Thanks for reaching out to Dr. Smile! We received: \"{message_text}\"")
+
             return "EVENT_RECEIVED", 200
         except Exception as e:
             logging.error(f"❌ POST Error: {e}")
