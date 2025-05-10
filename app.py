@@ -13,11 +13,11 @@ logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctim
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dr-smile-chatbot.onrender.com")
-SCRIPT_WEBHOOK_URL = os.getenv("SCRIPT_WEBHOOK_URL")  # your Google Apps Script web app URL
+SCRIPT_WEBHOOK_URL = os.getenv("SCRIPT_WEBHOOK_URL")  # Google Apps Script Web App URL
 PING_INTERVAL = 840
 TOKEN_FILE = "access_token.json"
 
-user_state = {}  # Temporarily store user inputs
+user_state = {}
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
@@ -50,6 +50,22 @@ def webhook():
             logging.error(f"❌ POST Error: {e}")
             return "Error", 500
 
+@app.route("/status-update", methods=["POST"])
+def status_update():
+    try:
+        data = request.get_json()
+        recipient_id = data.get("recipient_id")
+        message = data.get("message")
+
+        if recipient_id and message:
+            send_message(recipient_id, message)
+            return jsonify({"status": "success"}), 200
+        else:
+            return jsonify({"error": "Missing recipient_id or message"}), 400
+    except Exception as e:
+        logging.error(f"❌ Status update error: {e}")
+        return jsonify({"error": str(e)}), 500
+
 def handle_intent(sender_id, msg):
     if re.search(r"\b(order|tooth kit|buy|purchase)\b", msg):
         send_message(sender_id, "📍 Please enter your **town or parish** so we can assign the nearest dentist.")
@@ -76,7 +92,6 @@ def process_location(sender_id, location_text):
             send_message(sender_id, msg)
         else:
             send_message(sender_id, "❌ Sorry, we couldn’t find a dentist in that location. Please try another parish.")
-
     except Exception as e:
         logging.error(f"❌ Error processing location: {e}")
         send_message(sender_id, "⚠️ Something went wrong while assigning your office. Please try again later.")
