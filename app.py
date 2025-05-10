@@ -29,19 +29,22 @@ def webhook():
         try:
             payload = request.get_json(force=True)
             logging.info(f"📩 Incoming: {json.dumps(payload)}")
+
             for entry in payload.get("entry", []):
-                for event in entry.get("messaging", []):
-                    sender_id = event.get("sender", {}).get("id")
-                    message_text = event.get("message", {}).get("text", "").lower()
+                for messaging_event in entry.get("messaging", []):
+                    sender_id = messaging_event.get("sender", {}).get("id")
+                    message_text = messaging_event.get("message", {}).get("text", "").lower()
+
                     if sender_id and message_text:
                         if "order" in message_text:
-                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please confirm your location to start your order.")
-                        elif "paypal" in message_text:
-                            send_message(sender_id, "💳 You can pay via PayPal at: https://www.paypal.com/ncp/payment/G77UEE4UY8DQQ")
-                        elif "pi coin" in message_text or "pi network" in message_text:
-                            send_message(sender_id, "💎 Pay with Pi Network using wallet:\nMBC6NRTTQLRCABQHIR5J4R4YDJWFWRAO4ZRQIM2SVI5GSIZ2HZ42QAAAAAABEX5HINA7Y\n⚠️ Only Pi Mainnet supported.\nNot on Pi yet? Join: https://minepi.com/FREECOINS2021")
+                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! What location should we deliver your Tooth Kit™ to?")
+                        elif "confirm" in message_text:
+                            send_message(sender_id, "📍 Thanks! Please scan your QR code at the dental office or reply with your Order ID to confirm.")
+                        elif "payment" in message_text:
+                            send_message(sender_id, "💳 Choose a payment method:\n1️⃣ Cash on Delivery\n2️⃣ Bank Transfer (info coming)\n3️⃣ PayPal: https://www.paypal.com/ncp/payment/G77UEE4UY8DQQ\n4️⃣ Pi Coin: MBC6NRTTQLRCABQHIR5J4R4YDJWFWRAO4ZRQIM2SVI5GSIZ2HZ42QAAAAAABEX5HINA7Y\n\n⚠️ Do not send PI off-chain.")
                         else:
-                            send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
+                            send_message(sender_id, f"👋 Thanks for contacting Dr. Smile! We received: \"{message_text}\"")
+
             return "EVENT_RECEIVED", 200
         except Exception as e:
             logging.error(f"❌ POST Error: {e}")
@@ -51,7 +54,8 @@ def send_message(recipient_id, text):
     headers = {"Content-Type": "application/json"}
     data = {"recipient": {"id": recipient_id}, "message": {"text": text}}
     params = {"access_token": get_token()}
-    requests.post("https://graph.facebook.com/v18.0/me/messages", headers=headers, params=params, json=data)
+    response = requests.post("https://graph.facebook.com/v18.0/me/messages", headers=headers, params=params, json=data)
+    logging.info(f"📤 Sent to {recipient_id}: {text} | Status: {response.status_code}")
 
 @app.route("/refresh-token", methods=["GET"])
 def refresh_token():
@@ -91,6 +95,7 @@ def home():
 def keep_alive():
     while True:
         try:
+            logging.info(f"🔄 Pinging {RENDER_EXTERNAL_URL}")
             requests.get(RENDER_EXTERNAL_URL, timeout=10)
         except Exception as e:
             logging.error(f"❌ Ping failed: {e}")
