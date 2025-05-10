@@ -1,3 +1,8 @@
+# === DR. SMILE BOT app.py v2.7 ===
+# ✅ Includes Emoji-Rich Status Replies
+# ✅ Admin Message Resend Endpoint
+# ✅ Arrival Trigger from Bearer QR Scan
+
 import os
 import requests
 from flask import Flask, request, jsonify
@@ -12,8 +17,8 @@ logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctim
 
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
-RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dr-smile-chatbot.onrender.com")
-SCRIPT_WEBHOOK_URL = os.getenv("SCRIPT_WEBHOOK_URL")  # Google Apps Script Web App URL
+RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL")
+SCRIPT_WEBHOOK_URL = os.getenv("SCRIPT_WEBHOOK_URL")
 PING_INTERVAL = 840
 TOKEN_FILE = "access_token.json"
 
@@ -22,64 +27,71 @@ user_state = {}
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
-        mode = request.args.get("hub.mode")
-        token = request.args.get("hub.verify_token")
-        challenge = request.args.get("hub.challenge")
-        if mode == "subscribe" and token == VERIFY_TOKEN:
-            return challenge, 200
-        return "Forbidden: Token mismatch", 403
+        if request.args.get("hub.verify_token") == VERIFY_TOKEN:
+            return request.args.get("hub.challenge"), 200
+        return "Forbidden", 403
 
     elif request.method == "POST":
-        try:
-            payload = request.get_json(force=True)
-            logging.info(f"📩 Incoming: {json.dumps(payload)}")
+        payload = request.get_json(force=True)
+        logging.info(f"📩 Incoming: {json.dumps(payload)}")
 
-            for entry in payload.get("entry", []):
-                for messaging_event in entry.get("messaging", []):
-                    sender_id = messaging_event.get("sender", {}).get("id")
-                    message_text = messaging_event.get("message", {}).get("text", "").strip().lower()
+        for entry in payload.get("entry", []):
+            for messaging_event in entry.get("messaging", []):
+                sender_id = messaging_event.get("sender", {}).get("id")
+                message_text = messaging_event.get("message", {}).get("text", "").strip().lower()
 
-                    if sender_id and message_text:
-                        if sender_id in user_state and user_state[sender_id] == "awaiting_location":
-                            process_location(sender_id, message_text)
-                            del user_state[sender_id]
-                        else:
-                            handle_intent(sender_id, message_text)
-            return "EVENT_RECEIVED", 200
-        except Exception as e:
-            logging.error(f"❌ POST Error: {e}")
-            return "Error", 500
+                if sender_id and message_text:
+                    if sender_id in user_state and user_state[sender_id] == "awaiting_location":
+                        process_location(sender_id, message_text)
+                        del user_state[sender_id]
+                    else:
+                        handle_intent(sender_id, message_text)
+        return "EVENT_RECEIVED", 200
 
 @app.route("/status-update", methods=["POST"])
 def status_update():
-    try:
-        data = request.get_json()
-        recipient_id = data.get("recipient_id")
-        message = data.get("message")
+    data = request.get_json()
+    recipient_id = data.get("recipient_id")
+    raw_status = data.get("message", "").lower()
 
-        if recipient_id and message:
-            send_message(recipient_id, message)
-            return jsonify({"status": "success"}), 200
-        else:
-            return jsonify({"error": "Missing recipient_id or message"}), 400
-    except Exception as e:
-        logging.error(f"❌ Status update error: {e}")
-        return jsonify({"error": str(e)}), 500
+    emoji_messages = {
+        "confirmed": "✅ Order Confirmed! We’re prepping your smile kit.",
+        "preparing": "🧪 Preparing your tooth kit in the lab...",
+        "dispatched": "🚚 Your order is out for delivery!", 
+        "delivered": "📦 Delivered! We hope you love your new smile.",
+        "arrived": "🏥 You’ve checked in at the dentist. Good luck!"
+    }
+
+    final_msg = emoji_messages.get(raw_status, f"📢 Order update: {raw_status.title()}")
+    if recipient_id:
+        send_message(recipient_id, final_msg)
+        return jsonify({"status": "sent"}), 200
+    return jsonify({"error": "Missing fields"}), 400
+
+@app.route("/admin-broadcast", methods=["POST"])
+def admin_broadcast():
+    data = request.get_json()
+    try:
+        recipient = data["recipient_id"]
+        message = data["message"]
+        send_message(recipient, message)
+        return jsonify({"status": "sent"}), 200
+    except:
+        return jsonify({"error": "Bad request format"}), 400
 
 def handle_intent(sender_id, msg):
     if re.search(r"\b(order|tooth kit|buy|purchase)\b", msg):
-        send_message(sender_id, "📍 Please enter your **town or parish** so we can assign the nearest dentist.")
+        send_message(sender_id, "📍 Enter your town or parish to match you with a dentist.")
         user_state[sender_id] = "awaiting_location"
     elif re.search(r"\b(hi|hello|start|info)\b", msg):
-        send_message(sender_id, "👋 Hi! I’m Dr. Smile 🤗. Type *order* to get started or *location* to find a dentist.")
+        send_message(sender_id, "👋 I’m Dr. Smile 🤗. Type *order* to get started!")
     else:
-        send_message(sender_id, "🤔 Not sure what that means. Type *order* to begin your tooth kit purchase.")
+        send_message(sender_id, "🤔 I didn’t understand. Type *order* to begin your tooth kit purchase.")
 
 def process_location(sender_id, location_text):
     try:
         response = requests.post(SCRIPT_WEBHOOK_URL, json={"zone": location_text})
         data = response.json()
-
         if "office" in data:
             msg = (
                 f"🦷 Appointment Confirmed!\n\n"
@@ -87,14 +99,14 @@ def process_location(sender_id, location_text):
                 f"📍 Address: {data['address']}\n"
                 f"🗺️ Map: {data['mapLink']}\n"
                 f"📞 Contact: {data['phone']}\n\n"
-                f"🔁 Show this QR code on arrival:\n{data['qrCode']}"
+                f"🔁 Show this QR on arrival:\n{data['qrCode']}"
             )
             send_message(sender_id, msg)
         else:
-            send_message(sender_id, "❌ Sorry, we couldn’t find a dentist in that location. Please try another parish.")
+            send_message(sender_id, "❌ Dentist not found in that location. Try another parish.")
     except Exception as e:
-        logging.error(f"❌ Error processing location: {e}")
-        send_message(sender_id, "⚠️ Something went wrong while assigning your office. Please try again later.")
+        logging.error(f"❌ Location error: {e}")
+        send_message(sender_id, "⚠️ Something went wrong. Try again later.")
 
 def send_message(recipient_id, text):
     headers = {"Content-Type": "application/json"}
