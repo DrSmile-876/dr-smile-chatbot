@@ -13,8 +13,11 @@ logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctim
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dr-smile-chatbot.onrender.com")
+SCRIPT_WEBHOOK_URL = os.getenv("SCRIPT_WEBHOOK_URL")  # your Google Apps Script web app URL
 PING_INTERVAL = 840
 TOKEN_FILE = "access_token.json"
+
+user_state = {}  # Temporarily store user inputs
 
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
@@ -34,65 +37,55 @@ def webhook():
             for entry in payload.get("entry", []):
                 for messaging_event in entry.get("messaging", []):
                     sender_id = messaging_event.get("sender", {}).get("id")
-                    message_text = messaging_event.get("message", {}).get("text", "").lower()
+                    message_text = messaging_event.get("message", {}).get("text", "").strip().lower()
 
                     if sender_id and message_text:
-                        route_message(sender_id, message_text)
+                        if sender_id in user_state and user_state[sender_id] == "awaiting_location":
+                            process_location(sender_id, message_text)
+                            del user_state[sender_id]
+                        else:
+                            handle_intent(sender_id, message_text)
             return "EVENT_RECEIVED", 200
         except Exception as e:
             logging.error(f"❌ POST Error: {e}")
             return "Error", 500
 
-def route_message(sender_id, msg):
-    msg = msg.lower().strip()
-
-    if re.search(r"\b(order|buy|purchase|tooth\s?kit|tooth\s?replacement|replace)\b", msg):
-        send_message(sender_id, "🦷 Great choice! Please send us your **location or parish** so we can match you with the nearest dentist or delivery agent.")
-    elif re.search(r"\b(price|cost|how much|fee)\b", msg):
-        send_message(sender_id, "💵 The Dr. Smile Tooth Kit costs **$3,500 JMD**, including delivery! Cash on delivery & PayPal accepted.")
-    elif re.search(r"\b(hi|hello|hey|start|help|info)\b", msg):
-        send_message(sender_id, "👋 Hey there! I'm Dr. Smile 🤗. I can help you **order a tooth kit**, book a visit, or answer questions. Just type *order* or *how much* to begin.")
-    elif re.search(r"\b(location|where|available|office|dentist)\b", msg):
-        send_message(sender_id, "📍 We're available across Jamaica! Just type your **parish or town**, and we’ll connect you to the closest dental office.")
+def handle_intent(sender_id, msg):
+    if re.search(r"\b(order|tooth kit|buy|purchase)\b", msg):
+        send_message(sender_id, "📍 Please enter your **town or parish** so we can assign the nearest dentist.")
+        user_state[sender_id] = "awaiting_location"
+    elif re.search(r"\b(hi|hello|start|info)\b", msg):
+        send_message(sender_id, "👋 Hi! I’m Dr. Smile 🤗. Type *order* to get started or *location* to find a dentist.")
     else:
-        fallback_flow(sender_id, msg)
+        send_message(sender_id, "🤔 Not sure what that means. Type *order* to begin your tooth kit purchase.")
 
-def fallback_flow(sender_id, original_msg):
-    fallback_message = (
-        f"🤔 I'm not sure what \"{original_msg}\" means.\n\n"
-        "But no worries! Here's what you can do:\n"
-        "👉 Type **order** – to start your tooth kit purchase\n"
-        "👉 Type **how much** – to check the cost\n"
-        "👉 Type **location** – to find the nearest dental office\n"
-        "👉 Or simply say **hi** to begin\n\n"
-        "Let's get that smile glowing! 😁"
-    )
-    send_message(sender_id, fallback_message)
+def process_location(sender_id, location_text):
+    try:
+        response = requests.post(SCRIPT_WEBHOOK_URL, json={"zone": location_text})
+        data = response.json()
+
+        if "office" in data:
+            msg = (
+                f"🦷 Appointment Confirmed!\n\n"
+                f"📌 Dental Office: {data['office']}\n"
+                f"📍 Address: {data['address']}\n"
+                f"🗺️ Map: {data['mapLink']}\n"
+                f"📞 Contact: {data['phone']}\n\n"
+                f"🔁 Show this QR code on arrival:\n{data['qrCode']}"
+            )
+            send_message(sender_id, msg)
+        else:
+            send_message(sender_id, "❌ Sorry, we couldn’t find a dentist in that location. Please try another parish.")
+
+    except Exception as e:
+        logging.error(f"❌ Error processing location: {e}")
+        send_message(sender_id, "⚠️ Something went wrong while assigning your office. Please try again later.")
 
 def send_message(recipient_id, text):
     headers = {"Content-Type": "application/json"}
     data = {"recipient": {"id": recipient_id}, "message": {"text": text}}
     params = {"access_token": get_token()}
-    response = requests.post("https://graph.facebook.com/v18.0/me/messages", headers=headers, params=params, json=data)
-    logging.info(f"📤 Sent to {recipient_id}: {text} | Status: {response.status_code}")
-
-@app.route("/refresh-token", methods=["GET"])
-def refresh_token():
-    try:
-        res = requests.get("https://graph.facebook.com/v18.0/oauth/access_token", params={
-            "grant_type": "fb_exchange_token",
-            "client_id": os.getenv("FB_CLIENT_ID"),
-            "client_secret": os.getenv("FB_CLIENT_SECRET"),
-            "fb_exchange_token": os.getenv("FB_REFRESH_TOKEN")
-        })
-        data = res.json()
-        if "access_token" in data:
-            with open(TOKEN_FILE, "w") as f:
-                json.dump(data, f)
-            return jsonify({"status": "success", "token": data["access_token"]})
-        return jsonify({"status": "fail", "details": data}), 400
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+    requests.post("https://graph.facebook.com/v18.0/me/messages", headers=headers, params=params, json=data)
 
 def get_token():
     if os.path.exists(TOKEN_FILE):
@@ -103,8 +96,8 @@ def get_token():
             pass
     return PAGE_ACCESS_TOKEN
 
-@app.route("/healthz", methods=["GET"])
-def health_check():
+@app.route("/healthz")
+def healthz():
     return "OK", 200
 
 @app.route("/")
@@ -114,10 +107,9 @@ def home():
 def keep_alive():
     while True:
         try:
-            logging.info(f"🔄 Pinging {RENDER_EXTERNAL_URL}")
-            requests.get(RENDER_EXTERNAL_URL, timeout=10)
-        except Exception as e:
-            logging.error(f"❌ Ping failed: {e}")
+            requests.get(RENDER_EXTERNAL_URL)
+        except:
+            pass
         time.sleep(PING_INTERVAL)
 
 if __name__ == "__main__":
