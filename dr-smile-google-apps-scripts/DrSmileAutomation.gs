@@ -4,23 +4,21 @@
 
 // ========== CONFIG ==========
 var CONFIG = PropertiesService.getScriptProperties();
-var MAPS_API_KEY       = CONFIG.getProperty('MAPS_API_KEY');
-var SPREADSHEET_ID     = CONFIG.getProperty('SPREADSHEET_ID');
-var ARRIVAL_FORM_ID    = CONFIG.getProperty('ARRIVAL_FORM_ID');
-var TWILIO_SID         = CONFIG.getProperty('TWILIO_SID');
-var TWILIO_AUTH        = CONFIG.getProperty('TWILIO_AUTH');
-var TWILIO_NUMBER      = CONFIG.getProperty('TWILIO_NUMBER');
-var BUSINESS_EMAIL     = CONFIG.getProperty('BUSINESS_EMAIL');
+var MAPS_API_KEY    = CONFIG.getProperty('MAPS_API_KEY');
+var SPREADSHEET_ID  = CONFIG.getProperty('SPREADSHEET_ID');
+var ARRIVAL_FORM_ID = CONFIG.getProperty('ARRIVAL_FORM_ID');
+var TWILIO_SID      = CONFIG.getProperty('TWILIO_SID');
+var TWILIO_AUTH     = CONFIG.getProperty('TWILIO_AUTH');
+var TWILIO_NUMBER   = CONFIG.getProperty('TWILIO_NUMBER');
+var BUSINESS_EMAIL  = CONFIG.getProperty('BUSINESS_EMAIL');
 
 var DIGITAL_FORM_SHEET = 'Form Responses 1';
 var BEARER_DB_SHEET    = 'Delivery Agents';
 var ORDER_LOG_SHEET    = 'Deliveries Order Log';
 var DENTIST_DB_SHEET   = 'DentistDatabase';
 
-// ========== ON FORM SUBMIT ==========
 function onDigitalCheckIn(e) {
   if (!e || !e.range) return;
-
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName(DIGITAL_FORM_SHEET);
   var row = e.range.getRow();
@@ -37,7 +35,7 @@ function onDigitalCheckIn(e) {
   var latitude = values[idx('Latitude') - 1];
   var longitude = values[idx('Longitude') - 1];
   var mapLink = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-  var mapImg = `https://maps.googleapis.com/maps/api/staticmap?center=${latitude},${longitude}&zoom=15&size=600x300&markers=color:red%7C${latitude},${longitude}&key=${MAPS_API_KEY}`;
+  var mapImg  = `https://maps.googleapis.com/maps/api/staticmap?center=${latitude},${longitude}&zoom=15&size=600x300&markers=color:red%7C${latitude},${longitude}&key=${MAPS_API_KEY}`;
 
   var htmlBody = `<p>Hi ${fullName},</p>
     <p>Your appointment is booked at <strong>${office}</strong>.</p>
