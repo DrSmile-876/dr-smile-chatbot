@@ -1,4 +1,4 @@
-// ==== DR. SMILE SYSTEM v2.4 – ORDER TRACKING & DELIVERY + SMS + AUTO-TRIGGER CLEANUP ====
+// ==== DR. SMILE SYSTEM v2.5 – ORDER TRACKING & DELIVERY + SMS + AUTO-TRIGGER CLEANUP ====
 // FULLY SYNCED: Google Forms → Sheets → Email + SMS → Delivery Logs
 // 📦 Delivery Agent Auto-Assignment & Logging | ✅ Final Audited
 
@@ -6,144 +6,64 @@
 var CONFIG = PropertiesService.getScriptProperties();
 var MAPS_API_KEY    = CONFIG.getProperty('MAPS_API_KEY');
 var SPREADSHEET_ID  = CONFIG.getProperty('SPREADSHEET_ID');
-var ARRIVAL_FORM_ID = CONFIG.getProperty('ARRIVAL_FORM_ID');
-var TWILIO_SID      = CONFIG.getProperty('TWILIO_SID');
-var TWILIO_AUTH     = CONFIG.getProperty('TWILIO_AUTH');
-var TWILIO_NUMBER   = CONFIG.getProperty('TWILIO_NUMBER');
-var BUSINESS_EMAIL  = CONFIG.getProperty('BUSINESS_EMAIL');
-
-var DIGITAL_FORM_SHEET = 'Form Responses 1';
-var BEARER_DB_SHEET    = 'Delivery Agents';
-var ORDER_LOG_SHEET    = 'Deliveries Order Log';
 var DENTIST_DB_SHEET   = 'DentistDatabase';
+var QR_CODE_BASE_URL   = 'https://api.qrserver.com/v1/create-qr-code/?data=';  // fallback if not in sheet
 
-function onDigitalCheckIn(e) {
-  if (!e || !e.range) return;
-  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var sheet = ss.getSheetByName(DIGITAL_FORM_SHEET);
-  var row = e.range.getRow();
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var values = sheet.getRange(row, 1, 1, sheet.getLastColumn()).getValues()[0];
-  var idx = name => headers.indexOf(name) + 1;
+function doPost(e) {
+  var params = JSON.parse(e.postData.contents);
+  var zone = params.zone;
 
-  var fullName = values[idx('Customer Full Name') - 1];
-  var email = values[idx('Email') - 1];
-  var office = values[idx('Assigned Dental Office') - 1];
-  var leadId = values[idx('Lead ID') - 1];
-  var zone = values[idx('Preferred Location Zone') - 1];
-  var qrCode = values[idx('QR Code Link') - 1];
-  var latitude = values[idx('Latitude') - 1];
-  var longitude = values[idx('Longitude') - 1];
-  var mapLink = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-  var mapImg = `https://maps.googleapis.com/maps/api/staticmap?center=${latitude},${longitude}&zoom=15&size=600x300&markers=color:red%7C${latitude},${longitude}&key=${MAPS_API_KEY}`;
+  if (!zone) return ContentService.createTextOutput(JSON.stringify({ error: "No zone provided" })).setMimeType(ContentService.MimeType.JSON);
 
-  var htmlBody = `<p>Hi ${fullName},</p>
-    <p>Your appointment is booked at <strong>${office}</strong>.</p>
-    <p><a href="${mapLink}"><img src="${mapImg}" /></a></p>
-    <p>On arrival, scan this QR to confirm:</p>
-    <p><a href="${qrCode}"><img src="${qrCode}" /></a></p>`;
-
-  try {
-    MailApp.sendEmail({ to: email, subject: 'Your Dr. Smile Appointment', htmlBody });
-  } catch (err) {
-    sendTwilioSMS('+18761234567', `🛑 Email failed for ${fullName} lead.`);
+  var dentistData = getNearestDentist(zone);
+  if (!dentistData) {
+    return ContentService.createTextOutput(JSON.stringify({ error: "No dentist found in this zone" })).setMimeType(ContentService.MimeType.JSON);
   }
 
-  assignDeliveryAgent(zone, fullName, leadId, office);
+  var office = dentistData.name;
+  var address = dentistData.address;
+  var email = dentistData.email;
+  var phone = dentistData.phone;
+
+  var lat = dentistData.latitude;
+  var lng = dentistData.longitude;
+
+  var qrData = encodeURIComponent(`Dr. Smile - ${office} - ${zone}`);
+  var qrUrl = QR_CODE_BASE_URL + qrData;
+  var mapUrl = `https://maps.google.com/?q=${lat},${lng}`;
+  var mapImg = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=600x300&markers=color:red%7C${lat},${lng}&key=${MAPS_API_KEY}`;
+
+  var response = {
+    office: office,
+    address: address,
+    email: email,
+    phone: phone,
+    mapLink: mapUrl,
+    mapImg: mapImg,
+    qrCode: qrUrl
+  };
+
+  return ContentService.createTextOutput(JSON.stringify(response)).setMimeType(ContentService.MimeType.JSON);
 }
 
-function assignDeliveryAgent(zone, name, leadId, office) {
+function getNearestDentist(zone) {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var bearerSheet = ss.getSheetByName(BEARER_DB_SHEET);
-  var deliverySheet = ss.getSheetByName(ORDER_LOG_SHEET);
-  var data = bearerSheet.getDataRange().getValues();
-  var matches = data.filter((r, i) => i > 0 && r[2] === zone);
-  if (!matches.length) return;
-
-  var chosen = matches[Math.floor(Math.random() * matches.length)];
-  var bearerName = chosen[0];
-  var bearerPhone = chosen[1];
-  deliverySheet.appendRow([new Date(), leadId, name, zone, office, bearerName, bearerPhone]);
-  sendTwilioSMS(bearerPhone, `📦 New Dr. Smile order for ${name} in ${zone} ➜ ${office}`);
-}
-
-function onArrivalSubmit(e) {
-  if (!e || !e.namedValues) return;
-  var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  var sheet = ss.getSheetByName(DIGITAL_FORM_SHEET);
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var sheet = ss.getSheetByName(DENTIST_DB_SHEET);
   var data = sheet.getDataRange().getValues();
-  var idx = name => headers.indexOf(name) + 1;
-
-  var leadId = e.namedValues['Lead ID'][0];
-  var notes = (e.namedValues['Arrival Notes'] || [''])[0];
-  var row;
+  var headers = data[0];
+  var idx = name => headers.indexOf(name);
 
   for (var i = 1; i < data.length; i++) {
-    if (data[i][idx('Lead ID') - 1] === leadId) {
-      row = i + 1;
-      sheet.getRange(row, idx('Status')).setValue('Arrived');
-      sheet.getRange(row, idx('Arrival Time')).setValue(new Date());
-      break;
+    if (data[i][idx('zone')].toLowerCase() === zone.toLowerCase()) {
+      return {
+        name: data[i][idx('name')],
+        address: data[i][idx('address')],
+        phone: data[i][idx('phone')],
+        email: data[i][idx('email')],
+        latitude: data[i][idx('latitude')],
+        longitude: data[i][idx('longitude')]
+      };
     }
   }
-
-  if (!row) return;
-  var office = sheet.getRange(row, idx('Assigned Dental Office')).getValue();
-  var dentistSheet = ss.getSheetByName(DENTIST_DB_SHEET);
-  var dData = dentistSheet.getDataRange().getValues();
-  var dHeaders = dentistSheet.getRange(1, 1, 1, dentistSheet.getLastColumn()).getValues()[0];
-  var dIdx = name => dHeaders.indexOf(name) + 1;
-
-  for (var j = 1; j < dData.length; j++) {
-    if (dData[j][dIdx('name') - 1] === office) {
-      var email = dData[j][dIdx('email') - 1];
-      var phone = dData[j][dIdx('phone') - 1];
-      try {
-        MailApp.sendEmail({ to: email, subject: `📍 Patient Arrival`, body: `Lead ${leadId} has arrived.\nNotes: ${notes}` });
-      } catch (err) {
-        sendTwilioSMS(phone, `📍 Patient arrived for Lead ID ${leadId}`);
-      }
-      break;
-    }
-  }
-}
-
-function sendTwilioSMS(to, message) {
-  var url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`;
-  var payload = { To: to, From: TWILIO_NUMBER, Body: message };
-  var options = {
-    method: "post",
-    payload,
-    headers: {
-      "Authorization": "Basic " + Utilities.base64Encode(TWILIO_AUTH)
-    }
-  };
-  UrlFetchApp.fetch(url, options);
-}
-
-// === NEW: Deletes all triggers for safety ===
-function deleteAllTriggers() {
-  var triggers = ScriptApp.getProjectTriggers();
-  for (var i = 0; i < triggers.length; i++) {
-    ScriptApp.deleteTrigger(triggers[i]);
-  }
-  Logger.log("✅ All triggers deleted.");
-}
-
-// === NEW: Safe Trigger Creator ===
-function createAllTriggers() {
-  deleteAllTriggers();
-
-  ScriptApp.newTrigger('onDigitalCheckIn')
-    .forSpreadsheet(SpreadsheetApp.openById(SPREADSHEET_ID))
-    .onFormSubmit()
-    .create();
-
-  ScriptApp.newTrigger('onArrivalSubmit')
-    .forForm(FormApp.openById(ARRIVAL_FORM_ID))
-    .onFormSubmit()
-    .create();
-
-  Logger.log("✅ New triggers created successfully.");
+  return null;
 }
