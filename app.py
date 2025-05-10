@@ -5,13 +5,11 @@ import threading
 import time
 import logging
 import json
+import re
 
 app = Flask(__name__)
-
-# ✅ Logging setup
 logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
-# ✅ Load environment variables
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dr-smile-chatbot.onrender.com")
@@ -36,17 +34,40 @@ def webhook():
             for entry in payload.get("entry", []):
                 for messaging_event in entry.get("messaging", []):
                     sender_id = messaging_event.get("sender", {}).get("id")
-                    message_text = messaging_event.get("message", {}).get("text")
+                    message_text = messaging_event.get("message", {}).get("text", "").lower()
 
                     if sender_id and message_text:
-                        if "order" in message_text.lower():
-                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please confirm your location to begin your order.")
-                        else:
-                            send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
+                        route_message(sender_id, message_text)
             return "EVENT_RECEIVED", 200
         except Exception as e:
             logging.error(f"❌ POST Error: {e}")
             return "Error", 500
+
+def route_message(sender_id, msg):
+    msg = msg.lower().strip()
+
+    if re.search(r"\b(order|buy|purchase|tooth\s?kit|tooth\s?replacement|replace)\b", msg):
+        send_message(sender_id, "🦷 Great choice! Please send us your **location or parish** so we can match you with the nearest dentist or delivery agent.")
+    elif re.search(r"\b(price|cost|how much|fee)\b", msg):
+        send_message(sender_id, "💵 The Dr. Smile Tooth Kit costs **$3,500 JMD**, including delivery! Cash on delivery & PayPal accepted.")
+    elif re.search(r"\b(hi|hello|hey|start|help|info)\b", msg):
+        send_message(sender_id, "👋 Hey there! I'm Dr. Smile 🤗. I can help you **order a tooth kit**, book a visit, or answer questions. Just type *order* or *how much* to begin.")
+    elif re.search(r"\b(location|where|available|office|dentist)\b", msg):
+        send_message(sender_id, "📍 We're available across Jamaica! Just type your **parish or town**, and we’ll connect you to the closest dental office.")
+    else:
+        fallback_flow(sender_id, msg)
+
+def fallback_flow(sender_id, original_msg):
+    fallback_message = (
+        f"🤔 I'm not sure what \"{original_msg}\" means.\n\n"
+        "But no worries! Here's what you can do:\n"
+        "👉 Type **order** – to start your tooth kit purchase\n"
+        "👉 Type **how much** – to check the cost\n"
+        "👉 Type **location** – to find the nearest dental office\n"
+        "👉 Or simply say **hi** to begin\n\n"
+        "Let's get that smile glowing! 😁"
+    )
+    send_message(sender_id, fallback_message)
 
 def send_message(recipient_id, text):
     headers = {"Content-Type": "application/json"}
