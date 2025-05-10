@@ -4,23 +4,22 @@
 
 // ========== CONFIG ==========
 var CONFIG = PropertiesService.getScriptProperties();
-var MAPS_API_KEY = CONFIG.getProperty('MAPS_API_KEY');
-var SPREADSHEET_ID = CONFIG.getProperty('SPREADSHEET_ID');
-var ARRIVAL_FORM_ID = CONFIG.getProperty('ARRIVAL_FORM_ID');
-var TWILIO_SID = CONFIG.getProperty('TWILIO_SID');
-var TWILIO_AUTH = CONFIG.getProperty('TWILIO_AUTH');
-var TWILIO_NUMBER = CONFIG.getProperty('TWILIO_NUMBER');
-var BUSINESS_EMAIL = CONFIG.getProperty('BUSINESS_EMAIL');
+var MAPS_API_KEY       = CONFIG.getProperty('MAPS_API_KEY');
+var SPREADSHEET_ID     = CONFIG.getProperty('SPREADSHEET_ID');
+var ARRIVAL_FORM_ID    = CONFIG.getProperty('ARRIVAL_FORM_ID');
+var TWILIO_SID         = CONFIG.getProperty('TWILIO_SID');
+var TWILIO_AUTH        = CONFIG.getProperty('TWILIO_AUTH');
+var TWILIO_NUMBER      = CONFIG.getProperty('TWILIO_NUMBER');
+var BUSINESS_EMAIL     = CONFIG.getProperty('BUSINESS_EMAIL');
 
 var DIGITAL_FORM_SHEET = 'Form Responses 1';
-var BEARER_DB_SHEET = 'Delivery Agents';
-var ORDER_LOG_SHEET = 'Deliveries Order Log';
-var DENTIST_DB_SHEET = 'DentistDatabase';
+var BEARER_DB_SHEET    = 'Delivery Agents';
+var ORDER_LOG_SHEET    = 'Deliveries Order Log';
+var DENTIST_DB_SHEET   = 'DentistDatabase';
 
-// ========== DIGITAL FORM TRIGGER ==========
+// 📥 New lead → assign agent + notify
 function onDigitalCheckIn(e) {
   if (!e || !e.range) return;
-
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var sheet = ss.getSheetByName(DIGITAL_FORM_SHEET);
   var row = e.range.getRow();
@@ -54,7 +53,7 @@ function onDigitalCheckIn(e) {
   assignDeliveryAgent(zone, fullName, leadId, office);
 }
 
-// ========== DELIVERY ASSIGNMENT ==========
+// 🚚 Assign and notify bearer
 function assignDeliveryAgent(zone, name, leadId, office) {
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   var bearerSheet = ss.getSheetByName(BEARER_DB_SHEET);
@@ -70,7 +69,7 @@ function assignDeliveryAgent(zone, name, leadId, office) {
   sendTwilioSMS(bearerPhone, `📦 New Dr. Smile order for ${name} in ${zone} ➜ ${office}`);
 }
 
-// ========== ARRIVAL CONFIRMATION ==========
+// ✅ Confirm arrival and notify office
 function onArrivalSubmit(e) {
   if (!e || !e.namedValues) return;
   var ss = SpreadsheetApp.openById(SPREADSHEET_ID);
@@ -113,7 +112,7 @@ function onArrivalSubmit(e) {
   }
 }
 
-// ========== TWILIO FALLBACK ==========
+// ☎️ Fallback SMS
 function sendTwilioSMS(to, message) {
   var url = `https://api.twilio.com/2010-04-01/Accounts/${TWILIO_SID}/Messages.json`;
   var payload = { To: to, From: TWILIO_NUMBER, Body: message };
@@ -127,19 +126,8 @@ function sendTwilioSMS(to, message) {
   UrlFetchApp.fetch(url, options);
 }
 
-// ========== TRIGGERS ==========
 function createDigitalTrigger() {
-  ScriptApp.newTrigger('onDigitalCheckIn')
-    .forSpreadsheet(SpreadsheetApp.openById(SPREADSHEET_ID))
-    .onFormSubmit()
-    .create();
-}
-
-function createArrivalTrigger() {
-  ScriptApp.newTrigger('onArrivalSubmit')
-    .forForm(FormApp.openById(ARRIVAL_FORM_ID))
-    .onFormSubmit()
-    .create();
+  ScriptApp.newTrigger('onDigitalCheckIn').forSpreadsheet(SpreadsheetApp.openById(SPREADSHEET_ID)).onFormSubmit().create();
 }
 
 function createArrivalTrigger() {
