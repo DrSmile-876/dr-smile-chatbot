@@ -1,5 +1,6 @@
 // ==== DR. SMILE SYSTEM v2.2 – ORDER TRACKING & DELIVERY + SMS ====
-// Fully Synced: Google Forms → Sheets → Email + SMS → Delivery Assignment
+// FULLY SYNCED: Google Forms → Sheets → Email + SMS → Delivery Logs
+// 📦 Delivery Agent Auto-Assignment & Logging | ✅ Final Audited
 
 // ========== CONFIG ==========
 var CONFIG = PropertiesService.getScriptProperties();
