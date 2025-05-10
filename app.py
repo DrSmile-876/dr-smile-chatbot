@@ -34,27 +34,13 @@ def webhook():
             for entry in payload.get("entry", []):
                 for messaging_event in entry.get("messaging", []):
                     sender_id = messaging_event.get("sender", {}).get("id")
-                    message_text = messaging_event.get("message", {}).get("text", "")
-                    referral = messaging_event.get("referral", {})
+                    message_text = messaging_event.get("message", {}).get("text")
 
-                    # 🧠 Handle message-based logic
                     if sender_id and message_text:
                         if "order" in message_text.lower():
-                            send_message(sender_id, "🦷 Thanks for choosing Dr. Smile! Please send your 📍location to begin your order.")
-                        elif "location" in message_text.lower():
-                            send_message(sender_id, "📍 Location received. Please confirm your order by replying YES.")
-                        elif message_text.lower() in ["yes", "confirm"]:
-                            send_message(sender_id, "✅ Order confirmed! We will notify you once your kit is prepared and dispatched.")
-                        elif "qr" in message_text.lower():
-                            send_message(sender_id, "📸 Please scan your appointment QR code to confirm arrival.")
+                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please confirm your location to begin your order.")
                         else:
-                            send_message(sender_id, f"👋 Hi! We received: \"{message_text}\"")
-
-                    # 🧾 QR SCAN VIA REFERRAL
-                    if referral and "ref" in referral:
-                        ref_code = referral["ref"]
-                        send_message(sender_id, f"✅ Arrival confirmed with code: {ref_code}. Welcome to Dr. Smile!")
-
+                            send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
             return "EVENT_RECEIVED", 200
         except Exception as e:
             logging.error(f"❌ POST Error: {e}")
@@ -93,6 +79,10 @@ def get_token():
         except:
             pass
     return PAGE_ACCESS_TOKEN
+
+@app.route("/admin-dashboard", methods=["GET"])
+def dashboard():
+    return "<h2>🦷 Dr. Smile Admin Dashboard – Coming Soon</h2><p>This route will be expanded to show live orders, assignments, and QR logs.</p>"
 
 @app.route("/healthz", methods=["GET"])
 def health_check():
