@@ -7,8 +7,11 @@ import logging
 import json
 
 app = Flask(__name__)
+
+# ✅ Logging setup
 logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
+# ✅ Load environment variables
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dr-smile-chatbot.onrender.com")
@@ -33,15 +36,11 @@ def webhook():
             for entry in payload.get("entry", []):
                 for messaging_event in entry.get("messaging", []):
                     sender_id = messaging_event.get("sender", {}).get("id")
-                    message_text = messaging_event.get("message", {}).get("text", "")
+                    message_text = messaging_event.get("message", {}).get("text")
 
                     if sender_id and message_text:
                         if "order" in message_text.lower():
-                            send_message(sender_id, "🦷 Please enter your Order ID to confirm delivery:")
-                        elif message_text.upper().startswith("DRSM-"):
-                            # Confirmation step
-                            response = confirm_order_id(message_text.strip())
-                            send_message(sender_id, response)
+                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please confirm your location to begin your order.")
                         else:
                             send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
             return "EVENT_RECEIVED", 200
@@ -87,6 +86,10 @@ def get_token():
 def health_check():
     return "OK", 200
 
+@app.route("/")
+def home():
+    return "Dr. Smile Chatbot is Live ✅"
+
 def keep_alive():
     while True:
         try:
@@ -95,23 +98,6 @@ def keep_alive():
         except Exception as e:
             logging.error(f"❌ Ping failed: {e}")
         time.sleep(PING_INTERVAL)
-
-# ✅ ORDER ID CONFIRMATION API (uses Google Apps Script endpoint)
-def confirm_order_id(order_id):
-    try:
-        resp = requests.post(
-            os.getenv("CONFIRM_ORDER_ENDPOINT"),
-            json={"order_id": order_id},
-            timeout=10
-        )
-        result = resp.json()
-        if result.get("status") == "confirmed":
-            return f"✅ Order {order_id} has been successfully confirmed as delivered!"
-        else:
-            return f"⚠️ Order {order_id} not found or already marked as delivered."
-    except Exception as e:
-        logging.error(f"Confirmation failed: {e}")
-        return "⚠️ We encountered a problem confirming your order. Please try again."
 
 if __name__ == "__main__":
     threading.Thread(target=keep_alive, daemon=True).start()
