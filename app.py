@@ -33,18 +33,17 @@ def webhook():
             for entry in payload.get("entry", []):
                 for messaging_event in entry.get("messaging", []):
                     sender_id = messaging_event.get("sender", {}).get("id")
-                    message_text = messaging_event.get("message", {}).get("text", "").lower()
+                    message_text = messaging_event.get("message", {}).get("text", "")
 
                     if sender_id and message_text:
-                        if "order" in message_text:
-                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! What location should we deliver your Tooth Kit™ to?")
-                        elif "confirm" in message_text:
-                            send_message(sender_id, "📍 Thanks! Please scan your QR code at the dental office or reply with your Order ID to confirm.")
-                        elif "payment" in message_text:
-                            send_message(sender_id, "💳 Choose a payment method:\n1️⃣ Cash on Delivery\n2️⃣ Bank Transfer (info coming)\n3️⃣ PayPal: https://www.paypal.com/ncp/payment/G77UEE4UY8DQQ\n4️⃣ Pi Coin: MBC6NRTTQLRCABQHIR5J4R4YDJWFWRAO4ZRQIM2SVI5GSIZ2HZ42QAAAAAABEX5HINA7Y\n\n⚠️ Do not send PI off-chain.")
+                        if "order" in message_text.lower():
+                            send_message(sender_id, "🦷 Please enter your Order ID to confirm delivery:")
+                        elif message_text.upper().startswith("DRSM-"):
+                            # Confirmation step
+                            response = confirm_order_id(message_text.strip())
+                            send_message(sender_id, response)
                         else:
-                            send_message(sender_id, f"👋 Thanks for contacting Dr. Smile! We received: \"{message_text}\"")
-
+                            send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
             return "EVENT_RECEIVED", 200
         except Exception as e:
             logging.error(f"❌ POST Error: {e}")
@@ -88,10 +87,6 @@ def get_token():
 def health_check():
     return "OK", 200
 
-@app.route("/")
-def home():
-    return "Dr. Smile Chatbot is Live ✅"
-
 def keep_alive():
     while True:
         try:
@@ -100,6 +95,23 @@ def keep_alive():
         except Exception as e:
             logging.error(f"❌ Ping failed: {e}")
         time.sleep(PING_INTERVAL)
+
+# ✅ ORDER ID CONFIRMATION API (uses Google Apps Script endpoint)
+def confirm_order_id(order_id):
+    try:
+        resp = requests.post(
+            os.getenv("CONFIRM_ORDER_ENDPOINT"),
+            json={"order_id": order_id},
+            timeout=10
+        )
+        result = resp.json()
+        if result.get("status") == "confirmed":
+            return f"✅ Order {order_id} has been successfully confirmed as delivered!"
+        else:
+            return f"⚠️ Order {order_id} not found or already marked as delivered."
+    except Exception as e:
+        logging.error(f"Confirmation failed: {e}")
+        return "⚠️ We encountered a problem confirming your order. Please try again."
 
 if __name__ == "__main__":
     threading.Thread(target=keep_alive, daemon=True).start()
