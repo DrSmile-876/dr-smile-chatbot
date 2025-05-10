@@ -8,17 +8,14 @@ import json
 
 app = Flask(__name__)
 
-# ✅ Logging setup
 logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
-# ✅ Environment Variables
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dr-smile-chatbot.onrender.com")
 PING_INTERVAL = 840
 TOKEN_FILE = "access_token.json"
 
-# ✅ Webhook for Facebook verification + message handling
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -37,21 +34,32 @@ def webhook():
             for entry in payload.get("entry", []):
                 for messaging_event in entry.get("messaging", []):
                     sender_id = messaging_event.get("sender", {}).get("id")
-                    message_text = messaging_event.get("message", {}).get("text")
+                    message_text = messaging_event.get("message", {}).get("text", "")
+                    referral = messaging_event.get("referral", {})
 
+                    # 🧠 Handle message-based logic
                     if sender_id and message_text:
                         if "order" in message_text.lower():
-                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please confirm your location to begin your order.")
-                        elif "payment" in message_text.lower():
-                            send_message(sender_id, "💳 Choose your payment method:\n1. PayPal: https://www.paypal.com/ncp/payment/G77UEE4UY8DQQ\n2. Pi Coin: MBC6NRTTQLRCABQHIR5J4R4YDJWFWRAO4ZRQIM2SVI5GSIZ2HZ42QAAAAAABEX5HINA7Y\n⚠️ Use only native Pi Network assets!")
+                            send_message(sender_id, "🦷 Thanks for choosing Dr. Smile! Please send your 📍location to begin your order.")
+                        elif "location" in message_text.lower():
+                            send_message(sender_id, "📍 Location received. Please confirm your order by replying YES.")
+                        elif message_text.lower() in ["yes", "confirm"]:
+                            send_message(sender_id, "✅ Order confirmed! We will notify you once your kit is prepared and dispatched.")
+                        elif "qr" in message_text.lower():
+                            send_message(sender_id, "📸 Please scan your appointment QR code to confirm arrival.")
                         else:
-                            send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
+                            send_message(sender_id, f"👋 Hi! We received: \"{message_text}\"")
+
+                    # 🧾 QR SCAN VIA REFERRAL
+                    if referral and "ref" in referral:
+                        ref_code = referral["ref"]
+                        send_message(sender_id, f"✅ Arrival confirmed with code: {ref_code}. Welcome to Dr. Smile!")
+
             return "EVENT_RECEIVED", 200
         except Exception as e:
             logging.error(f"❌ POST Error: {e}")
             return "Error", 500
 
-# ✅ Messenger reply
 def send_message(recipient_id, text):
     headers = {"Content-Type": "application/json"}
     data = {"recipient": {"id": recipient_id}, "message": {"text": text}}
@@ -59,7 +67,6 @@ def send_message(recipient_id, text):
     response = requests.post("https://graph.facebook.com/v18.0/me/messages", headers=headers, params=params, json=data)
     logging.info(f"📤 Sent to {recipient_id}: {text} | Status: {response.status_code}")
 
-# ✅ Refresh Facebook page token
 @app.route("/refresh-token", methods=["GET"])
 def refresh_token():
     try:
@@ -78,7 +85,6 @@ def refresh_token():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# ✅ Load token
 def get_token():
     if os.path.exists(TOKEN_FILE):
         try:
@@ -88,7 +94,6 @@ def get_token():
             pass
     return PAGE_ACCESS_TOKEN
 
-# ✅ Health check for Render
 @app.route("/healthz", methods=["GET"])
 def health_check():
     return "OK", 200
@@ -97,7 +102,6 @@ def health_check():
 def home():
     return "Dr. Smile Chatbot is Live ✅"
 
-# 🔁 Keep-alive ping
 def keep_alive():
     while True:
         try:
