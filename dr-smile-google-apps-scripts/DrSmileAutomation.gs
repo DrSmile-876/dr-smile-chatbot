@@ -1,8 +1,9 @@
-// ==== DR. SMILE SYSTEM v2.2 – ORDER TRACKING & DELIVERY + SMS ====
+// ==== DR. SMILE SYSTEM v2.4 – ORDER TRACKING & DELIVERY + SMS + AUTO-TRIGGER CLEANUP ====
 // FULLY SYNCED: Google Forms → Sheets → Email + SMS → Delivery Logs
 // 📦 Delivery Agent Auto-Assignment & Logging | ✅ Final Audited
 
-// ========== CONFIG ==========
+// ==== CONFIG  ====
+
 var CONFIG = PropertiesService.getScriptProperties();
 var MAPS_API_KEY    = CONFIG.getProperty('MAPS_API_KEY');
 var SPREADSHEET_ID  = CONFIG.getProperty('SPREADSHEET_ID');
@@ -35,7 +36,7 @@ function onDigitalCheckIn(e) {
   var latitude = values[idx('Latitude') - 1];
   var longitude = values[idx('Longitude') - 1];
   var mapLink = `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
-  var mapImg  = `https://maps.googleapis.com/maps/api/staticmap?center=${latitude},${longitude}&zoom=15&size=600x300&markers=color:red%7C${latitude},${longitude}&key=${MAPS_API_KEY}`;
+  var mapImg = `https://maps.googleapis.com/maps/api/staticmap?center=${latitude},${longitude}&zoom=15&size=600x300&markers=color:red%7C${latitude},${longitude}&key=${MAPS_API_KEY}`;
 
   var htmlBody = `<p>Hi ${fullName},</p>
     <p>Your appointment is booked at <strong>${office}</strong>.</p>
@@ -122,10 +123,28 @@ function sendTwilioSMS(to, message) {
   UrlFetchApp.fetch(url, options);
 }
 
-function createDigitalTrigger() {
-  ScriptApp.newTrigger('onDigitalCheckIn').forSpreadsheet(SpreadsheetApp.openById(SPREADSHEET_ID)).onFormSubmit().create();
+// === NEW: Deletes all triggers for safety ===
+function deleteAllTriggers() {
+  var triggers = ScriptApp.getProjectTriggers();
+  for (var i = 0; i < triggers.length; i++) {
+    ScriptApp.deleteTrigger(triggers[i]);
+  }
+  Logger.log("✅ All triggers deleted.");
 }
 
-function createArrivalTrigger() {
-  ScriptApp.newTrigger('onArrivalSubmit').forForm(FormApp.openById(ARRIVAL_FORM_ID)).onFormSubmit().create();
+// === NEW: Safe Trigger Creator ===
+function createAllTriggers() {
+  deleteAllTriggers();
+
+  ScriptApp.newTrigger('onDigitalCheckIn')
+    .forSpreadsheet(SpreadsheetApp.openById(SPREADSHEET_ID))
+    .onFormSubmit()
+    .create();
+
+  ScriptApp.newTrigger('onArrivalSubmit')
+    .forForm(FormApp.openById(ARRIVAL_FORM_ID))
+    .onFormSubmit()
+    .create();
+
+  Logger.log("✅ New triggers created successfully.");
 }
