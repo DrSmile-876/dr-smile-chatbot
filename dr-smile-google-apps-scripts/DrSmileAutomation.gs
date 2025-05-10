@@ -3,7 +3,6 @@
 // 📦 Delivery Agent Auto-Assignment & Logging | ✅ Final Audited
 
 // ==== CONFIG  ====
-
 var CONFIG = PropertiesService.getScriptProperties();
 var MAPS_API_KEY    = CONFIG.getProperty('MAPS_API_KEY');
 var SPREADSHEET_ID  = CONFIG.getProperty('SPREADSHEET_ID');
