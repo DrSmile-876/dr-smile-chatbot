@@ -1,18 +1,20 @@
-// ==== DR. SMILE SYSTEM v2.5 – ORDER TRACKING & DELIVERY + SMS + AUTO-TRIGGER CLEANUP ====
+// ==== DR. SMILE SYSTEM v2.6 – ORDER TRACKING & DELIVERY + SMS + AUTO-TRIGGER CLEANUP ====
 // FULLY SYNCED: Google Forms → Sheets → Email + SMS → Delivery Logs
 // 📦 Delivery Agent Auto-Assignment & Logging | ✅ Final Audited
 
 // ==== CONFIG  ====
 var CONFIG = PropertiesService.getScriptProperties();
-var MAPS_API_KEY    = CONFIG.getProperty('MAPS_API_KEY');
-var SPREADSHEET_ID  = CONFIG.getProperty('SPREADSHEET_ID');
-var DENTIST_DB_SHEET   = 'DentistDatabase';
-var QR_CODE_BASE_URL   = 'https://api.qrserver.com/v1/create-qr-code/?data=';  // fallback if not in sheet
+var MAPS_API_KEY = CONFIG.getProperty('MAPS_API_KEY');
+var SPREADSHEET_ID = CONFIG.getProperty('SPREADSHEET_ID');
+var MESSENGER_WEBHOOK = CONFIG.getProperty("MESSENGER_WEBHOOK");
+var DENTIST_DB_SHEET = 'DentistDatabase';
+var ORDER_LOG_SHEET = 'Deliveries Order Log';
+var QR_CODE_BASE_URL = 'https://api.qrserver.com/v1/create-qr-code/?data=';
 
+// ========== APPOINTMENT MATCH ==========
 function doPost(e) {
   var params = JSON.parse(e.postData.contents);
   var zone = params.zone;
-
   if (!zone) return ContentService.createTextOutput(JSON.stringify({ error: "No zone provided" })).setMimeType(ContentService.MimeType.JSON);
 
   var dentistData = getNearestDentist(zone);
@@ -22,9 +24,7 @@ function doPost(e) {
 
   var office = dentistData.name;
   var address = dentistData.address;
-  var email = dentistData.email;
   var phone = dentistData.phone;
-
   var lat = dentistData.latitude;
   var lng = dentistData.longitude;
 
@@ -36,7 +36,6 @@ function doPost(e) {
   var response = {
     office: office,
     address: address,
-    email: email,
     phone: phone,
     mapLink: mapUrl,
     mapImg: mapImg,
@@ -66,4 +65,47 @@ function getNearestDentist(zone) {
     }
   }
   return null;
+}
+
+// ========== ORDER STATUS MESSENGER UPDATES ==========
+function trackOrderUpdates(e) {
+  if (!e || !e.range) return;
+  var sheet = e.source.getSheetByName(ORDER_LOG_SHEET);
+  if (!sheet) return;
+
+  var row = e.range.getRow();
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var statusCol = headers.indexOf("Order Status") + 1;
+  var idCol = headers.indexOf("Messenger ID") + 1;
+  if (e.range.getColumn() !== statusCol) return;
+
+  var status = sheet.getRange(row, statusCol).getValue();
+  var userId = sheet.getRange(row, idCol).getValue();
+  if (!userId || !status) return;
+
+  var message = `📦 Your Dr. Smile order status has been updated: *${status}*`;
+
+  var payload = JSON.stringify({
+    recipient_id: userId,
+    message: message
+  });
+
+  var options = {
+    method: "post",
+    contentType: "application/json",
+    payload: payload
+  };
+
+  try {
+    UrlFetchApp.fetch(MESSENGER_WEBHOOK, options);
+  } catch (error) {
+    Logger.log("❌ Messenger update failed: " + error);
+  }
+}
+
+function createOrderStatusTrigger() {
+  ScriptApp.newTrigger("trackOrderUpdates")
+    .forSpreadsheet(SpreadsheetApp.openById(SPREADSHEET_ID))
+    .onEdit()
+    .create();
 }
