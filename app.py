@@ -11,13 +11,14 @@ app = Flask(__name__)
 # ✅ Logging setup
 logging.basicConfig(filename='drsmile.log', level=logging.INFO, format='%(asctime)s - %(message)s')
 
-# ✅ Load environment variables
+# ✅ Environment Variables
 VERIFY_TOKEN = os.getenv("VERIFY_TOKEN", "mydrsmileverifytoken123")
 PAGE_ACCESS_TOKEN = os.getenv("PAGE_ACCESS_TOKEN")
 RENDER_EXTERNAL_URL = os.getenv("RENDER_EXTERNAL_URL", "https://dr-smile-chatbot.onrender.com")
-PING_INTERVAL = 840  # 14 minutes
+PING_INTERVAL = 840
 TOKEN_FILE = "access_token.json"
 
+# ✅ Webhook for Facebook verification + message handling
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     if request.method == "GET":
@@ -39,23 +40,18 @@ def webhook():
                     message_text = messaging_event.get("message", {}).get("text")
 
                     if sender_id and message_text:
-                        lowered = message_text.lower()
-                        if "order" in lowered:
-                            send_message(sender_id, "🦷 Great! Please send your *delivery location* to begin your Dr. Smile Tooth Kit™ order.")
-                        elif "paid" in lowered or "payment" in lowered:
-                            send_message(sender_id, "✅ Please upload your payment confirmation or let us know your payment method (Cash on Delivery, Bank Transfer, PayPal, Pi Coin).")
-                        elif "paypal" in lowered:
-                            send_message(sender_id, "🔗 Pay securely for your Dr. Smile Tooth Kit™ via PayPal:\nhttps://www.paypal.com/ncp/payment/G77UEE4UY8DQQ")
-                        elif "pi coin" in lowered:
-                            send_message(sender_id, "💎 Send Pi Coin payments to:\n*MBC6NRTTQLRCABQHIR5J4R4YDJWFWRAO4ZRQIM2SVI5GSIZ2HZ42QAAAAAABEX5HINA7Y*\n\n⚠️ Only send Pi on the Pi Chain. Not on other networks. Use this referral if you're new: https://minepi.com/FREECOINS2021")
+                        if "order" in message_text.lower():
+                            send_message(sender_id, "🦷 Thank you for choosing Dr. Smile! Please confirm your location to begin your order.")
+                        elif "payment" in message_text.lower():
+                            send_message(sender_id, "💳 Choose your payment method:\n1. PayPal: https://www.paypal.com/ncp/payment/G77UEE4UY8DQQ\n2. Pi Coin: MBC6NRTTQLRCABQHIR5J4R4YDJWFWRAO4ZRQIM2SVI5GSIZ2HZ42QAAAAAABEX5HINA7Y\n⚠️ Use only native Pi Network assets!")
                         else:
-                            send_message(sender_id, f"👋 Thanks for contacting Dr. Smile! You said: \"{message_text}\"")
-
+                            send_message(sender_id, f"👋 Thanks for reaching out! We received: \"{message_text}\"")
             return "EVENT_RECEIVED", 200
         except Exception as e:
             logging.error(f"❌ POST Error: {e}")
             return "Error", 500
 
+# ✅ Messenger reply
 def send_message(recipient_id, text):
     headers = {"Content-Type": "application/json"}
     data = {"recipient": {"id": recipient_id}, "message": {"text": text}}
@@ -63,6 +59,7 @@ def send_message(recipient_id, text):
     response = requests.post("https://graph.facebook.com/v18.0/me/messages", headers=headers, params=params, json=data)
     logging.info(f"📤 Sent to {recipient_id}: {text} | Status: {response.status_code}")
 
+# ✅ Refresh Facebook page token
 @app.route("/refresh-token", methods=["GET"])
 def refresh_token():
     try:
@@ -81,6 +78,7 @@ def refresh_token():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# ✅ Load token
 def get_token():
     if os.path.exists(TOKEN_FILE):
         try:
@@ -90,6 +88,7 @@ def get_token():
             pass
     return PAGE_ACCESS_TOKEN
 
+# ✅ Health check for Render
 @app.route("/healthz", methods=["GET"])
 def health_check():
     return "OK", 200
@@ -98,6 +97,7 @@ def health_check():
 def home():
     return "Dr. Smile Chatbot is Live ✅"
 
+# 🔁 Keep-alive ping
 def keep_alive():
     while True:
         try:
