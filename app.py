@@ -1,7 +1,8 @@
-# === DR. SMILE BOT app.py v2.7 ===
+# === DR. SMILE BOT app.py v2.8 DEBUG MODE ===
 # ✅ Includes Emoji-Rich Status Replies
 # ✅ Admin Message Resend Endpoint
 # ✅ Arrival Trigger from Bearer QR Scan
+# ✅ DEBUG fallback response for all messages
 
 import os
 import requests
@@ -86,7 +87,7 @@ def handle_intent(sender_id, msg):
     elif re.search(r"\b(hi|hello|start|info)\b", msg):
         send_message(sender_id, "👋 I’m Dr. Smile 🤗. Type *order* to get started!")
     else:
-        send_message(sender_id, "🤔 I didn’t understand. Type *order* to begin your tooth kit purchase.")
+        send_message(sender_id, f"🧪 DEBUG: Received your message '{msg}' but didn't match any command. Type *order* to start.")
 
 def process_location(sender_id, location_text):
     try:
@@ -112,7 +113,11 @@ def send_message(recipient_id, text):
     headers = {"Content-Type": "application/json"}
     data = {"recipient": {"id": recipient_id}, "message": {"text": text}}
     params = {"access_token": get_token()}
-    requests.post("https://graph.facebook.com/v18.0/me/messages", headers=headers, params=params, json=data)
+    try:
+        response = requests.post("https://graph.facebook.com/v18.0/me/messages", headers=headers, params=params, json=data)
+        logging.info(f"📤 Sent to {recipient_id}: {text} | Status: {response.status_code}")
+    except Exception as e:
+        logging.error(f"❌ Failed to send message to {recipient_id}: {e}")
 
 def get_token():
     if os.path.exists(TOKEN_FILE):
